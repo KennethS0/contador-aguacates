@@ -77,6 +77,14 @@
     }
     button:hover { background: var(--accent); }
     .qty button { min-width: 52px; font-size: 1.3rem; font-weight: 700; }
+    .segmented { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; border: 0; padding: 0; margin: 0; }
+    .segmented input { position: absolute; opacity: 0; pointer-events: none; }
+    .segmented label {
+      margin: 0; text-align: center; font-weight: 600; cursor: pointer;
+      padding: 10px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+    }
+    .segmented input:checked + label { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .segmented input:focus-visible + label { outline: 2px solid var(--primary); outline-offset: 1px; }
     .primary {
       background: var(--primary);
       border-color: var(--primary);
@@ -130,6 +138,10 @@
         <datalist id="tag-list"></datalist>
       </div>
       <div class="field">
+        <label id="variety-label">Variedad</label>
+        <fieldset class="segmented" id="variety" aria-labelledby="variety-label"></fieldset>
+      </div>
+      <div class="field">
         <label for="qty">Cantidad de aguacates</label>
         <div class="qty">
           <button type="button" id="minus" aria-label="Restar 1">−</button>
@@ -163,7 +175,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>#</th><th>Etiqueta</th><th class="num">Cantidad</th><th>Fecha</th><th></th></tr>
+          <tr><th>#</th><th>Etiqueta</th><th>Variedad</th><th class="num">Cantidad</th><th>Fecha</th><th></th></tr>
         </thead>
         <tbody id="rows"></tbody>
       </table>
@@ -177,10 +189,29 @@
 
 <script>
   const STORAGE_KEY = 'aguacates.registros.v1';
+  const VARIETY_KEY = 'aguacates.ultimaVariedad';
+  const VARIETIES = ['Hass', 'Lamb Hass', 'Kahalu'];
   const $ = (id) => document.getElementById(id);
 
   let records = load();
   let editingId = null;
+
+  $('variety').innerHTML = VARIETIES.map((v, i) => `
+    <input type="radio" name="variety" id="v${i}" value="${v}" required>
+    <label for="v${i}">${v}</label>`).join('');
+
+  function getVariety() {
+    return document.querySelector('input[name=variety]:checked')?.value || '';
+  }
+
+  function setVariety(v) {
+    document.querySelectorAll('input[name=variety]').forEach((el) => { el.checked = el.value === v; });
+  }
+
+  function lastVariety() {
+    try { return localStorage.getItem(VARIETY_KEY) || VARIETIES[0]; }
+    catch { return VARIETIES[0]; }
+  }
 
   function load() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
@@ -217,6 +248,7 @@
       tr.innerHTML = `
         <td>${records.length - i}</td>
         <td>${r.tag ? escapeHtml(r.tag) : '<span class="no-tag">Sin etiqueta</span>'}</td>
+        <td>${r.variety ? escapeHtml(r.variety) : '<span class="no-tag">—</span>'}</td>
         <td class="num">${r.qty}</td>
         <td>${formatDate(r.date)}</td>
         <td class="num">
@@ -237,6 +269,7 @@
   function resetForm() {
     editingId = null;
     $('form').reset();
+    setVariety(lastVariety());
     $('form-title').textContent = 'Registrar cosecha';
     $('submit').textContent = 'Guardar';
     $('cancel').hidden = true;
@@ -246,6 +279,11 @@
     e.preventDefault();
     const tag = $('tag').value.trim();
     const qty = parseInt($('qty').value, 10);
+    const variety = getVariety();
+    if (!variety) {
+      toast('Selecciona la variedad');
+      return;
+    }
     if (!Number.isInteger(qty) || qty < 0) {
       toast('Ingresa una cantidad válida');
       $('qty').focus();
@@ -254,13 +292,15 @@
     if (editingId) {
       const r = records.find((x) => x.id === editingId);
       r.tag = tag;
+      r.variety = variety;
       r.qty = qty;
       toast('Registro actualizado');
     } else {
-      records.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), tag, qty, date: new Date().toISOString() });
-      toast(`Guardado: ${qty} aguacate${qty === 1 ? '' : 's'}`);
+      records.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), tag, variety, qty, date: new Date().toISOString() });
+      toast(`Guardado: ${qty} ${variety}`);
     }
     save();
+    try { localStorage.setItem(VARIETY_KEY, variety); } catch {}
     resetForm();
     render();
     $('tag').focus();
@@ -282,6 +322,7 @@
       const r = records.find((x) => x.id === editId);
       editingId = editId;
       $('tag').value = r.tag;
+      setVariety(r.variety || '');
       $('qty').value = r.qty;
       $('form-title').textContent = 'Editar registro';
       $('submit').textContent = 'Actualizar';
@@ -314,32 +355,49 @@
     const detail = records.map((r, i) => ({
       'No.': i + 1,
       'Etiqueta': r.tag || 'Sin etiqueta',
+      'Variedad': r.variety || '',
       'Cantidad': r.qty,
       'Fecha': new Date(r.date),
     }));
 
-    const byTag = {};
-    records.forEach((r) => {
-      const key = r.tag || 'Sin etiqueta';
-      byTag[key] = byTag[key] || { 'Etiqueta': key, 'Registros': 0, 'Total aguacates': 0 };
-      byTag[key]['Registros'] += 1;
-      byTag[key]['Total aguacates'] += r.qty;
-    });
-    const summary = Object.values(byTag).sort((a, b) => a['Etiqueta'].localeCompare(b['Etiqueta'], 'es', { numeric: true }));
-    summary.push({ 'Etiqueta': 'TOTAL', 'Registros': records.length, 'Total aguacates': records.reduce((s, r) => s + r.qty, 0) });
+    const totalQty = records.reduce((s, r) => s + r.qty, 0);
+    const byKey = (keyFn, label) => {
+      const groups = {};
+      records.forEach((r) => {
+        const key = keyFn(r);
+        groups[key.join('|')] = groups[key.join('|')] || { ...Object.fromEntries(label.map((l, i) => [l, key[i]])), 'Registros': 0, 'Total aguacates': 0 };
+        groups[key.join('|')]['Registros'] += 1;
+        groups[key.join('|')]['Total aguacates'] += r.qty;
+      });
+      return Object.values(groups);
+    };
+
+    const byTree = byKey((r) => [r.tag || 'Sin etiqueta', r.variety || ''], ['Etiqueta', 'Variedad'])
+      .sort((a, b) => a['Etiqueta'].localeCompare(b['Etiqueta'], 'es', { numeric: true }) || a['Variedad'].localeCompare(b['Variedad']));
+    byTree.push({ 'Etiqueta': 'TOTAL', 'Variedad': '', 'Registros': records.length, 'Total aguacates': totalQty });
+
+    // Always list every variety (even with 0); records saved before varieties existed go last
+    const varietyGroups = byKey((r) => [r.variety || 'Sin variedad'], ['Variedad']);
+    const byVariety = VARIETIES.map((v) => varietyGroups.find((g) => g['Variedad'] === v) || { 'Variedad': v, 'Registros': 0, 'Total aguacates': 0 })
+      .concat(varietyGroups.filter((g) => !VARIETIES.includes(g['Variedad'])));
+    byVariety.push({ 'Variedad': 'TOTAL', 'Registros': records.length, 'Total aguacates': totalQty });
 
     const wb = XLSX.utils.book_new();
     const ws1 = XLSX.utils.json_to_sheet(detail, { cellDates: true, dateNF: 'yyyy-mm-dd hh:mm' });
-    ws1['!cols'] = [{ wch: 6 }, { wch: 18 }, { wch: 10 }, { wch: 18 }];
-    const ws2 = XLSX.utils.json_to_sheet(summary);
-    ws2['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 16 }];
+    ws1['!cols'] = [{ wch: 6 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 18 }];
+    const ws2 = XLSX.utils.json_to_sheet(byTree);
+    ws2['!cols'] = [{ wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 16 }];
+    const ws3 = XLSX.utils.json_to_sheet(byVariety);
+    ws3['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Registros');
     XLSX.utils.book_append_sheet(wb, ws2, 'Resumen por árbol');
+    XLSX.utils.book_append_sheet(wb, ws3, 'Resumen por variedad');
 
     const stamp = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `cosecha-aguacates-${stamp}.xlsx`);
   });
 
+  setVariety(lastVariety());
   render();
 </script>
 </body>

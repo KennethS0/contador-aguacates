@@ -4,14 +4,16 @@ Aplicación web sencilla para registrar cuántos aguacates se cosechan de cada �
 
 ## Funciones
 
-- Registrar una cosecha con **etiqueta del árbol** (opcional) y **cantidad** de aguacates.
+- Registrar una cosecha con **etiqueta del árbol** (opcional), **variedad** (Hass, Lamb Hass o Kahalu) y **cantidad** de aguacates.
+- La app recuerda la última variedad elegida.
 - Botones `+` / `−` para ajustar la cantidad rápidamente desde el celular.
 - Autocompletado de etiquetas ya usadas.
 - Editar o eliminar registros.
 - Totales: aguacates, registros y árboles etiquetados.
-- **Exportar a Excel (.xlsx)** con dos hojas:
-  - `Registros`: cada cosecha con su fecha.
-  - `Resumen por árbol`: total por etiqueta y total general.
+- **Exportar a Excel (.xlsx)** con tres hojas:
+  - `Registros`: cada cosecha con su variedad y fecha.
+  - `Resumen por árbol`: total por etiqueta y variedad, y total general.
+  - `Resumen por variedad`: total de Hass, Lamb Hass y Kahalu.
 
 ## Datos
 
