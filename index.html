@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contador de Aguacates</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥑</text></svg>">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7ef;
+      --card: #ffffff;
+      --text: #1f2a1a;
+      --muted: #5f6b58;
+      --border: #d9e2cf;
+      --primary: #4a7c2a;
+      --primary-dark: #3a6320;
+      --accent: #f1f7e9;
+      --danger: #b3261e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #141a11;
+        --card: #1d2519;
+        --text: #e6eedf;
+        --muted: #a2b096;
+        --border: #34412d;
+        --primary: #7cb342;
+        --primary-dark: #8fc456;
+        --accent: #253020;
+        --danger: #f2817a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.4;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 16px; }
+    header { display: flex; align-items: center; gap: 10px; margin: 8px 0 16px; }
+    header h1 { font-size: 1.5rem; margin: 0; }
+    header .logo { font-size: 2rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    h2 { font-size: 1.1rem; margin: 0 0 12px; }
+    label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 4px; }
+    .hint { font-weight: 400; color: var(--muted); }
+    input[type=text], input[type=number] {
+      width: 100%;
+      font-size: 1.1rem;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .field { margin-bottom: 14px; }
+    .qty { display: flex; gap: 8px; }
+    .qty input { text-align: center; }
+    button {
+      font: inherit;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 10px 14px;
+    }
+    button:hover { background: var(--accent); }
+    .qty button { min-width: 52px; font-size: 1.3rem; font-weight: 700; }
+    .primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+      font-weight: 600;
+      width: 100%;
+      font-size: 1.05rem;
+    }
+    .primary:hover { background: var(--primary-dark); }
+    .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stat { background: var(--accent); border-radius: 10px; padding: 10px; text-align: center; }
+    .stat .num { font-size: 1.5rem; font-weight: 700; }
+    .stat .lbl { font-size: .8rem; color: var(--muted); }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .toolbar h2 { margin: 0; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; }
+    td.num, th.num { text-align: right; }
+    td .no-tag { color: var(--muted); font-style: italic; }
+    .icon-btn { padding: 4px 8px; font-size: .85rem; }
+    .danger { color: var(--danger); }
+    .empty { text-align: center; color: var(--muted); padding: 20px 0; }
+    .toast {
+      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+      background: var(--primary); color: #fff; padding: 10px 18px; border-radius: 999px;
+      opacity: 0; transition: opacity .2s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+    footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 8px 0 24px; }
+    @media (max-width: 480px) {
+      .stat .num { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="logo">🥑</span>
+    <h1>Contador de Aguacates</h1>
+  </header>
+
+  <section class="card">
+    <h2 id="form-title">Registrar cosecha</h2>
+    <form id="form" autocomplete="off">
+      <div class="field">
+        <label for="tag">Etiqueta del árbol <span class="hint">(opcional)</span></label>
+        <input type="text" id="tag" placeholder="Ej. A-12" list="tag-list">
+        <datalist id="tag-list"></datalist>
+      </div>
+      <div class="field">
+        <label for="qty">Cantidad de aguacates</label>
+        <div class="qty">
+          <button type="button" id="minus" aria-label="Restar 1">−</button>
+          <input type="number" id="qty" min="0" step="1" inputmode="numeric" required placeholder="0">
+          <button type="button" id="plus" aria-label="Sumar 1">+</button>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button type="submit" class="primary" id="submit">Guardar</button>
+        <button type="button" id="cancel" hidden>Cancelar edición</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="stats">
+      <div class="stat"><div class="num" id="s-total">0</div><div class="lbl">Aguacates</div></div>
+      <div class="stat"><div class="num" id="s-records">0</div><div class="lbl">Registros</div></div>
+      <div class="stat"><div class="num" id="s-trees">0</div><div class="lbl">Árboles etiquetados</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="toolbar">
+      <h2>Registros</h2>
+      <div class="row-actions">
+        <button type="button" id="export">⬇ Exportar a Excel</button>
+        <button type="button" id="clear" class="danger">Borrar todo</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Etiqueta</th><th class="num">Cantidad</th><th>Fecha</th><th></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="empty">Aún no hay registros.</p>
+  </section>
+
+  <footer>Los datos se guardan en este dispositivo y navegador. Exporta a Excel para respaldarlos.</footer>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+  const STORAGE_KEY = 'aguacates.registros.v1';
+  const $ = (id) => document.getElementById(id);
+
+  let records = load();
+  let editingId = null;
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
+  }
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }
+    catch { toast('No se pudo guardar en este navegador'); }
+  }
+
+  function formatDate(iso) {
+    return new Date(iso).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+  }
+
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function render() {
+    const tbody = $('rows');
+    tbody.innerHTML = '';
+    // Newest first
+    [...records].reverse().forEach((r, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${records.length - i}</td>
+        <td>${r.tag ? escapeHtml(r.tag) : '<span class="no-tag">Sin etiqueta</span>'}</td>
+        <td class="num">${r.qty}</td>
+        <td>${formatDate(r.date)}</td>
+        <td class="num">
+          <button class="icon-btn" data-edit="${r.id}" aria-label="Editar">✏️</button>
+          <button class="icon-btn danger" data-del="${r.id}" aria-label="Eliminar">🗑️</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+    $('empty').hidden = records.length > 0;
+
+    const tags = [...new Set(records.map((r) => r.tag).filter(Boolean))];
+    $('s-total').textContent = records.reduce((sum, r) => sum + r.qty, 0).toLocaleString('es-MX');
+    $('s-records').textContent = records.length;
+    $('s-trees').textContent = tags.length;
+    $('tag-list').innerHTML = tags.map((t) => `<option value="${escapeHtml(t)}">`).join('');
+  }
+
+  function resetForm() {
+    editingId = null;
+    $('form').reset();
+    $('form-title').textContent = 'Registrar cosecha';
+    $('submit').textContent = 'Guardar';
+    $('cancel').hidden = true;
+  }
+
+  $('form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const tag = $('tag').value.trim();
+    const qty = parseInt($('qty').value, 10);
+    if (!Number.isInteger(qty) || qty < 0) {
+      toast('Ingresa una cantidad válida');
+      $('qty').focus();
+      return;
+    }
+    if (editingId) {
+      const r = records.find((x) => x.id === editingId);
+      r.tag = tag;
+      r.qty = qty;
+      toast('Registro actualizado');
+    } else {
+      records.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), tag, qty, date: new Date().toISOString() });
+      toast(`Guardado: ${qty} aguacate${qty === 1 ? '' : 's'}`);
+    }
+    save();
+    resetForm();
+    render();
+    $('tag').focus();
+  });
+
+  $('cancel').addEventListener('click', resetForm);
+
+  $('plus').addEventListener('click', () => {
+    $('qty').value = (parseInt($('qty').value, 10) || 0) + 1;
+  });
+  $('minus').addEventListener('click', () => {
+    $('qty').value = Math.max(0, (parseInt($('qty').value, 10) || 0) - 1);
+  });
+
+  $('rows').addEventListener('click', (e) => {
+    const editId = e.target.closest('[data-edit]')?.dataset.edit;
+    const delId = e.target.closest('[data-del]')?.dataset.del;
+    if (editId) {
+      const r = records.find((x) => x.id === editId);
+      editingId = editId;
+      $('tag').value = r.tag;
+      $('qty').value = r.qty;
+      $('form-title').textContent = 'Editar registro';
+      $('submit').textContent = 'Actualizar';
+      $('cancel').hidden = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      $('qty').focus();
+    }
+    if (delId && confirm('¿Eliminar este registro?')) {
+      records = records.filter((x) => x.id !== delId);
+      if (editingId === delId) resetForm();
+      save();
+      render();
+    }
+  });
+
+  $('clear').addEventListener('click', () => {
+    if (!records.length) return;
+    if (confirm('¿Borrar TODOS los registros? Te recomendamos exportar a Excel primero.')) {
+      records = [];
+      save();
+      resetForm();
+      render();
+    }
+  });
+
+  $('export').addEventListener('click', () => {
+    if (!records.length) { toast('No hay datos para exportar'); return; }
+    if (typeof XLSX === 'undefined') { toast('No se pudo cargar el exportador (¿sin internet?)'); return; }
+
+    const detail = records.map((r, i) => ({
+      'No.': i + 1,
+      'Etiqueta': r.tag || 'Sin etiqueta',
+      'Cantidad': r.qty,
+      'Fecha': new Date(r.date),
+    }));
+
+    const byTag = {};
+    records.forEach((r) => {
+      const key = r.tag || 'Sin etiqueta';
+      byTag[key] = byTag[key] || { 'Etiqueta': key, 'Registros': 0, 'Total aguacates': 0 };
+      byTag[key]['Registros'] += 1;
+      byTag[key]['Total aguacates'] += r.qty;
+    });
+    const summary = Object.values(byTag).sort((a, b) => a['Etiqueta'].localeCompare(b['Etiqueta'], 'es', { numeric: true }));
+    summary.push({ 'Etiqueta': 'TOTAL', 'Registros': records.length, 'Total aguacates': records.reduce((s, r) => s + r.qty, 0) });
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.json_to_sheet(detail, { cellDates: true, dateNF: 'yyyy-mm-dd hh:mm' });
+    ws1['!cols'] = [{ wch: 6 }, { wch: 18 }, { wch: 10 }, { wch: 18 }];
+    const ws2 = XLSX.utils.json_to_sheet(summary);
+    ws2['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Registros');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Resumen por árbol');
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `cosecha-aguacates-${stamp}.xlsx`);
+  });
+
+  render();
+</script>
+</body>
+</html>
